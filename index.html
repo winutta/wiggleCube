@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<link rel = "stylesheet" type = "text/css" href = "style.css">
+	<meta charset = "utf-8"/>
+	<script src = "three.min.js"></script>
+	<script src = "OrbitControls.js"></script>
+
+</head>
+<body>
+	<canvas id = "c"></canvas>
+</body>
+<script type = "x-shader/x-vertex" id = "vertexShader">
+      varying vec3 pos;
+      uniform float iTime;
+      #define PI 3.1415926538
+
+      //Random number generator vec3 -> float
+
+      float random3 (in vec3 _st) {
+          return fract(sin(dot(_st,
+                               vec3(12.9898,78.233,123.24647)))*
+            43758.5453123);
+      }
+
+
+      //Continuous noise function vec3 -> float
+      float noise3 (in vec3 _st) {
+          vec3 i = floor(_st);
+          vec3 fr = fract(_st);
+
+          // Four corners in 2D of a tile
+          float a = random3(i);
+          float b = random3(i + vec3(1.0, 0.0, 0.0));
+          float c = random3(i + vec3(0.0, 1.0, 0.0));
+          float d = random3(i + vec3(1.0, 1.0, 0.0));
+          
+          float e = random3(i + vec3(0.0, 0.0, 1.0));
+          float f = random3(i + vec3(1.0, 0.0, 1.0));
+          float g = random3(i + vec3(0.0, 1.0, 1.0));
+          float h = random3(i + vec3(1.0, 1.0, 1.0));
+
+          vec3 u = fr * fr * (3.0 - 2.0 * fr);
+          
+          float bf = mix(a,b,u.x);
+          float bb = mix(c,d,u.x);
+          
+          float bot = mix(bf,bb,u.y);
+          
+          float tf = mix(e,f,u.x);
+          float tb = mix(g,h,u.x);
+          
+          float top = mix(tf,tb,u.y); 
+
+          return mix(bot,top,u.z);
+      }
+
+      #define NUM_OCTAVES 2
+
+      //Fractional Brownian Motion with set parameters vec3 -> float
+
+      float fbm3 ( in vec3 _st) {
+          float v = 0.0;
+          float a = 0.5;
+          vec3 shift = vec3(100.0);
+          float offset = 0.;
+          for (int i = 0; i < NUM_OCTAVES; ++i) {
+              offset += a*2.5;
+              v += a * noise3(_st)*2.5;
+              _st = _st * 2. + shift;
+              a *= 0.5;
+          }
+          return v/offset;
+      }
+
+      //Nested Fractional Brownian Motion for varied bumps look vec3 -> float
+      //Using an n value of 3 is nice
+
+      float fbmN(vec3 _st, int n){
+        float v = 0.;
+          for (int i = 0;i<4;i++){
+              if(i>=n) break;
+              v= fbm3(_st + v*4.);
+          }
+          
+          return v;
+      }
+
+
+      void main()
+      {
+     		vec3 nPos = position;
+
+        float len = length(nPos);
+
+        //Create height value h
+        float h = 0.;
+
+        //Add sine wave bumps that move across cube
+        vec3 sines = sin(nPos + iTime/50.);
+        h += sines.x*0.33 + sines.y*0.33 + sines.z*0.33 + 1.;
+
+        //Add fractional Brownian Motion (Noise) to give more varied bumps
+        h += fbmN(nPos/10. + iTime/1000.,3)*5.;
+
+        //Scale vertices on the cube with the height value h calculated above
+        //Use sine function to oscilate between no added height and full added height 
+        nPos *= (len + 28.3*(h/len)*(sin(iTime/1000.)+1.)/2.)/len;
+
+        pos = nPos;
+        
+     		vec4 modelViewPosition = modelViewMatrix * vec4(nPos,1.0);
+        gl_Position = projectionMatrix * modelViewPosition;
+      
+      }
+
+    </script>
+
+    <script type = "x-shader/x-fragment" id = "fragmentShader">
+
+    varying vec3 pos;
+    uniform float iTime;
+    uniform vec2 res;             
+    void main() {
+    	vec2 st = gl_FragCoord.xy/res.xy;
+
+      vec3 p = pos;
+      p /= 20.;
+      //transition from just length (brighter white further from center coord 0,0,0) to absolute position vector abs(p)
+      //use the same period /1000 as in the height adding to make them coincide
+      p = mix(vec3(length(p)),p,(sin(iTime/1000.)+1.)/2.);
+
+      vec3 color = abs(p);
+      gl_FragColor = vec4(color,1.);
+     }
+
+    </script>
+	<script src = "threeSketch.js"></script>
+</html>
